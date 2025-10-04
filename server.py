@@ -1,10 +1,10 @@
 from http import server, client
+import os
+import json
 
-start = False
-
-def encode_url(hello_msg: bytes) -> str:
+def encode_url(msg: bytes) -> str:
     result = ''
-    for byte in hello_msg.encode('utf-8'):
+    for byte in msg.encode('utf-8'):
         match byte:
             # цифры 0-9
             case n if 0x30 <= n <= 0x39:
@@ -20,15 +20,47 @@ def encode_url(hello_msg: bytes) -> str:
                 result += f"%{n:02X}"
     return result
 
-def send_telegram_message(chat_id: int, text: str) -> int:
-    conn = client.HTTPSConnection('api.telegram.org')
+def send_telegram_message(conn, chat_id: int, text: str) -> int:
     conn.request('GET', f'/bot{__import__('os').environ.get('BOT_TOKEN')}/sendMessage?chat_id={chat_id}&text={text}')
     response = conn.getresponse()
-    message_id = __import__('json').loads(response.read())['result']['message_id']
+    message_id = json.loads(response.read())['result']['message_id']
     return message_id
+
+def edit_tg_msg(connection_to_telegram, chat_id: int, message_id: int, text: str):
+    connection_to_telegram.request('GET',
+        f'/bot{__import__('os').environ.get('BOT_TOKEN')}/editMessageText?chat_id={chat_id}&message_id={message_id}&text={text}')
+
+def deepl(message, target_lang):
+
+    # TODO: сохранять время запроса
+
+    connection = client.HTTPSConnection('api-free.deepl.com')
+    connection.request(
+        'POST', '/v2/translate',
+        json.dumps({
+            'text': [message],
+            'target_lang': target_lang
+            # TODO: указать язык из кого переводить
+        }), {
+            "Content-Type": "application/json",
+            'Authorization': os.environ['DEEPL_API_KEY']
+        })
+    response = connection.getresponse()
+
+    response = json.loads(response.read()) 
+
+    row_translate = str(response['translations'][0]['text'])
+
+    print(response)
+    if response['translations'][0]['detected_source_language'] == target_lang:
+        return deepl(message, 'ES')
+  
+    connection.close()
+    return row_translate
 
 class MyHandler(server.SimpleHTTPRequestHandler):
     def do_POST(self):
+        print('do_POST')
         self.send_response(200)
         self.end_headers()
 
@@ -38,28 +70,28 @@ class MyHandler(server.SimpleHTTPRequestHandler):
 
 
 
-     
-        match data['message']['text']:
-            case '/start':
-                hello_msg = encode_url('Отправьте мне "да",\n если ваш родной язык — русский,\n и Вы хотите учить английский')
-                send_telegram_message(data['message']['from']['id'], hello_msg)
-            case _:
-                global start
-                if start:
-                    print("начинаем урок")     
-                    send_telegram_message(data['message']['from']['id'], encode_url('Урок начался!'))
-                elif data['message']['text'] in {'да' , 'Да' , 'ДА' , 'yes' , 'Yes' , 'YES' , 'DA' , 'Da' , 'da'}:
-                    start = True
-                    send_telegram_message(data['message']['from']['id'], encode_url('Отлично!\nТеперь отправьте мне фразу на русском или английском языке, которую хотите выучить.\n\n И с помощью мини-уроков, включающих аудиозапись, текст и вопросы, вы сможете каждый день повторять нужные вам фразы')) 
-                else:
-                    send_telegram_message(data['message']['from']['id'], encode_url('Вот список доступных ботов для каждого языка:\nRU → EN\nRU → ES\n\nЕсли вашего языка нет в списке, напишите нам об этом (@mr_Moish), и мы постараемся добавить его в ближайшее время\n\nПерейдите в нужный бот или подтвердите, отправив "да", что ваш родной язык — русский, и вы хотите учить английский'))
-
-
+        if 'message' in data:
+            message = data['message']['text']
+            id = data['message']['from']['id']
+            conn = client.HTTPSConnection('api.telegram.org')
+            match message:
+                case '/start':
+                    hello_msg = 'На данны момент этот бот работает в режиме переводчика c любого языка мира на русские и с русского на аргентинский🇪🇸 🇦🇷\n\n приимущества:\n ✅ сохраняетcя всю вашу историую перевод, в удобном форманте чата на всех устройсвах где есть телеграм\n\nв будущем:\n🚀 мы добавим мини-уроков используя, включающие аудиозапись, текст и вопросы, вы сможете каждый день повторять нужные лично вам фразы 🚀\n\nНачнем!? Напишите слово или фарзу на русском или испанаском'
+                    send_telegram_message(conn, id, encode_url(hello_msg))
+                case _:
+                    msg = '⏳' if bool(hash(object()) % 2) else '⌛️'
+                    
+                    msg_id = send_telegram_message(conn,id, encode_url(msg))
+                    tr = deepl(message, 'RU')
+                    edit_tg_msg(conn, id, msg_id, encode_url(tr))
+                    
+        else:
+            pass
 
 
 
 def serve_forever():
-    server.HTTPServer(('', int(__import__('os').environ['PORT'])), MyHandler).serve_forever()
+    server.HTTPServer(('', int(os.environ['PORT'])), MyHandler).serve_forever()
     
 # запуск на сервере, но не запускается при тестах
 if __name__ == "__main__":
