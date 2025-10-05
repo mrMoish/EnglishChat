@@ -50,13 +50,43 @@ def deepl(message, target_lang):
     response = json.loads(response.read()) 
 
     row_translate = str(response['translations'][0]['text'])
-
-    print(response)
-    if response['translations'][0]['detected_source_language'] == target_lang:
-        return deepl(message, 'ES')
   
     connection.close()
     return row_translate
+
+def gpt_translate(message, target_lang):
+
+    # TODO: сохранять время запроса
+
+    connection = client.HTTPSConnection('openrouter.ai')
+    
+    connection.request(
+        'POST', '/api/v1/chat/completions',
+        json.dumps({
+        # "model": "openai/gpt-5",
+        'model': 'x-ai/grok-4',
+        "messages": [
+            {
+            "role": "user",
+            "content": 'Provide only all possible natural Russian translations of the following text: ' + message,
+            },
+        ],
+        }), {
+      "Content-Type": "application/json",
+      "Authorization": os.environ['OPENROUTER_API_KEY'],
+      "X-Custom-Header": "custom-value",
+    })
+
+    response = connection.getresponse()
+
+    response = json.loads(response.read()) 
+
+
+    translate = response['choices'][0]['message']['content']
+
+  
+    connection.close()
+    return translate
 
 class MyHandler(server.SimpleHTTPRequestHandler):
     def do_POST(self):
@@ -64,29 +94,42 @@ class MyHandler(server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
+
         content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length)
         data = __import__('json').loads(post_data)
 
 
-
+        conn = client.HTTPSConnection('api.telegram.org')
         if 'message' in data:
-            message = data['message']['text']
             id = data['message']['from']['id']
-            conn = client.HTTPSConnection('api.telegram.org')
-            match message:
-                case '/start':
-                    hello_msg = 'Это бот для ежедневных мини-уроков испанского.\n\n  На данный момент этот бот работает в режиме переводчика c любого языка мира на русский и с русского на испанский🇪🇸 🇦🇷\n\nпреимущества:\n✅ сохраняетcя вся ваша история перевода, в удобном формате чата на всех устройствах, где есть телеграм\n\nв будущем:\n🚀 мы добавим мини-уроки, включающие аудиозапись, текст и вопросы, вы сможете каждый день повторять нужные лично вам фразы 🚀🚀🚀\n\nНачнем!? Напишите слово или фразу на русском или испанском'
-                    send_telegram_message(conn, id, encode_url(hello_msg))
-                case _:
-                    msg = '⏳' if bool(hash(object()) % 2) else '⌛️'
-                    
-                    msg_id = send_telegram_message(conn,id, encode_url(msg))
-                    tr = deepl(message, 'RU')
-                    edit_tg_msg(conn, id, msg_id, encode_url(tr))
-                    
+            if 'text' in data['message']:
+                message = data['message']['text']
+                
+                match message:
+                    case '/start':
+                        hello_msg = 'Это бот для ежедневных мини-уроков испанского.\n\n  На данный момент этот бот работает в режиме переводчика c любого языка мира на русский и с русского на испанский🇪🇸 🇦🇷\n\nпреимущества:\n✅ сохраняетcя вся ваша история перевода, в удобном формате чата на всех устройствах, где есть телеграм\n\nв будущем:\n🚀 мы добавим мини-уроки, включающие аудиозапись, текст и вопросы, вы сможете каждый день повторять нужные лично вам фразы 🚀🚀🚀\n\nНачнем!? Напишите слово или фразу на русском или испанском'
+                        send_telegram_message(conn, id, encode_url(hello_msg))
+                    case _:
+                        
+                        
+                        
+
+                        target_lang = 'ES' if __import__('re').fullmatch(r"[\u0400-\u04FF\s]+", message) else 'RU'
+                        msg = '⏳' if bool(hash(object()) % 2) else '⌛️'
+                        if len(message.split()) == 1:
+                            msg_id = send_telegram_message(conn,id, encode_url('Одно слово переводится дольше (примерно 30 секунд), потому что будет использоваться более мощный инструмент перевода, чтобы выдать более полный список возможных переводов этого слова. Пожалуйста, подождите ⏳'))
+                            tr = gpt_translate(message, target_lang)
+                        else:
+                            msg_id = send_telegram_message(conn,id, encode_url(msg))
+                            tr = deepl(message, target_lang)
+                        edit_tg_msg(conn, id, msg_id, encode_url(tr))
+            else:
+                send_telegram_message(conn, id, encode_url('к сожалению, этот бот пока работает только с текстом 🥲'))
+
         else:
             pass
+        conn.close()
 
 
 
