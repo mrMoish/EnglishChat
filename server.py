@@ -51,13 +51,10 @@ def deepl(message, source_lang, target_lang):
     response = json.loads(response.read()) 
 
     row_translate = str(response['translations'][0]['text'])
-
-    print(response)
-    if response['translations'][0]['detected_source_language'] == target_lang:
-        return deepl(message, 'RU', 'ES')
   
     connection.close()
     return row_translate
+
 
 class MyHandler(server.SimpleHTTPRequestHandler):
     def do_POST(self):
@@ -65,29 +62,39 @@ class MyHandler(server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
+
         content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length)
         data = __import__('json').loads(post_data)
 
 
-
+        conn = client.HTTPSConnection('api.telegram.org')
         if 'message' in data:
-            message = data['message']['text']
             id = data['message']['from']['id']
-            conn = client.HTTPSConnection('api.telegram.org')
-            match message:
-                case '/start':
-                    hello_msg = 'Это бот для ежедневных мини-уроков испанского.\n\n  На данный момент этот бот работает в режиме переводчика c любого языка мира на русский и с русского на испанский🇪🇸 🇦🇷\n\nпреимущества:\n✅ сохраняетcя вся ваша история перевода, в удобном формате чата на всех устройствах, где есть телеграм\n\nв будущем:\n🚀 мы добавим мини-уроки, включающие аудиозапись, текст и вопросы, вы сможете каждый день повторять нужные лично вам фразы 🚀🚀🚀\n\nНачнем!? Напишите слово или фразу на русском или испанском'
-                    send_telegram_message(conn, id, encode_url(hello_msg))
-                case _:
-                    msg = '⏳' if bool(hash(object()) % 2) else '⌛️'
-                    
-                    msg_id = send_telegram_message(conn,id, encode_url(msg))
-                    tr = deepl(message, 'ES', 'RU')
-                    edit_tg_msg(conn, id, msg_id, encode_url(tr))
-                    
+            if 'text' in data['message']:
+                message = data['message']['text']
+                
+                match message:
+                    case '/start':
+                        hello_msg = 'Это бот для ежедневных мини-уроков испанского.\n\n  На данный момент этот бот работает в режиме переводчика c любого языка мира на русский и с русского на испанский🇪🇸 🇦🇷\n\nпреимущества:\n✅ сохраняетcя вся ваша история перевода, в удобном формате чата на всех устройствах, где есть телеграм\n\nв будущем:\n🚀 мы добавим мини-уроки, включающие аудиозапись, текст и вопросы, вы сможете каждый день повторять нужные лично вам фразы 🚀🚀🚀\n\nНачнем!? Напишите слово или фразу на русском или испанском'
+                        send_telegram_message(conn, id, encode_url(hello_msg))
+                    case _:
+                        
+                        
+                        
+
+                        target_lang = 'ES' if __import__('re').fullmatch(r"[\u0400-\u04FF\s]+", message) else 'RU'
+                        source_lang = 'RU' if __import__('re').fullmatch(r"[\u0400-\u04FF\s]+", message) else 'ES'
+                        msg = '⏳' if bool(hash(object()) % 2) else '⌛️'
+                        msg_id = send_telegram_message(conn,id, encode_url(msg))
+                        tr = deepl(message, source_lang, target_lang)
+                        edit_tg_msg(conn, id, msg_id, encode_url(tr))
+            else:
+                send_telegram_message(conn, id, encode_url('к сожалению, этот бот пока работает только с текстом 🥲'))
+
         else:
             pass
+        conn.close()
 
 
 
