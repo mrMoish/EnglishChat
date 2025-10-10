@@ -30,28 +30,25 @@ def edit_tg_msg(connection_to_telegram, chat_id: int, message_id: int, text: str
     connection_to_telegram.request('GET',
         f'/bot{__import__('os').environ.get('BOT_TOKEN')}/editMessageText?chat_id={chat_id}&message_id={message_id}&text={text}')
 
-def deepl(message, source_lang, target_lang):
+def translate(message, source_lang, target_lang):
 
     # TODO: сохранять время запроса
 
-    connection = client.HTTPSConnection('api-free.deepl.com')
+    connection = client.HTTPSConnection('openrouter.ai')
     connection.request(
-        'POST', '/v2/translate',
+        'POST', '/api/v1/chat/completions',
         json.dumps({
-            'text': [message],
-            'source_lang': source_lang,
-            'target_lang': target_lang
-            # TODO: указать язык из кого переводить
+            'model': 'openai/gpt-4o',
+            'prompt':f'Be as brief as possible! Translate from {source_lang} to {target_lang}: {message}',
         }), {
             "Content-Type": "application/json",
-            'Authorization': os.environ['DEEPL_API_KEY']
+            'Authorization': os.environ['OPENROUTER_API_KEY']
         })
     response = connection.getresponse()
 
     response = json.loads(response.read()) 
+    row_translate = str(response['choices'][0]['text'])
 
-    row_translate = str(response['translations'][0]['text'])
-  
     connection.close()
     return row_translate
 
@@ -83,11 +80,11 @@ class MyHandler(server.SimpleHTTPRequestHandler):
                         
                         
 
-                        target_lang = 'ES' if __import__('re').fullmatch(r"[\u0400-\u04FF\s]+", message) else 'RU'
-                        source_lang = 'RU' if __import__('re').fullmatch(r"[\u0400-\u04FF\s]+", message) else 'ES'
+                        target_lang = 'Argentinian Spanish' if __import__('re').fullmatch(r"[\u0400-\u04FF\s]+", message) else 'Russian'
+                        source_lang = 'Russian' if __import__('re').fullmatch(r"[\u0400-\u04FF\s]+", message) else 'Argentinian Spanish'
                         msg = '⏳' if bool(hash(object()) % 2) else '⌛️'
                         msg_id = send_telegram_message(conn,id, encode_url(msg))
-                        tr = deepl(message, source_lang, target_lang)
+                        tr = translate(message, source_lang, target_lang)
                         edit_tg_msg(conn, id, msg_id, encode_url(tr))
             else:
                 send_telegram_message(conn, id, encode_url('к сожалению, этот бот пока работает только с текстом 🥲'))
