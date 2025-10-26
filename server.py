@@ -79,9 +79,15 @@ class MyHandler(server.SimpleHTTPRequestHandler):
                         
                         
                         
+                        if __import__('re').search(r"[\u0400-\u04FF]", message):
+                            target_lang = 'Argentinian Spanish'
+                            source_lang = 'Russian'
+                        else:
+                            target_lang = 'Russian'
+                            source_lang = 'Argentinian Spanish'
 
-                        target_lang = 'Argentinian Spanish' if __import__('re').fullmatch(r"[\u0400-\u04FF\s]+", message) else 'Russian'
-                        source_lang = 'Russian' if __import__('re').fullmatch(r"[\u0400-\u04FF\s]+", message) else 'Argentinian Spanish'
+                        
+                        
                         msg = '⏳' if bool(hash(object()) % 2) else '⌛️'
                         msg_id = send_telegram_message(conn,id, encode_url(msg))
                         tr = translate(message, source_lang, target_lang)
