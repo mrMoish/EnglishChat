@@ -187,9 +187,18 @@ class MyHandler(server.SimpleHTTPRequestHandler):
                 conn = client.HTTPSConnection("api.telegram.org")
                 conn.request("POST", f"/bot{os.environ.get('BOT_TOKEN')}/sendAudio", body, headers)
 
+
+
                 response = conn.getresponse()
                 print(response.status)
                 print(response.read().decode())
+
+                conn.request(
+                    "GET",
+                    f"/bot{os.environ.get('BOT_TOKEN')}/deleteMessage?chat_id={id}&message_id={msg_id}"
+                )
+
+
                 
                 
         else:
