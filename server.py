@@ -211,8 +211,8 @@ class MyHandler(server.SimpleHTTPRequestHandler):
                 text = text_lesson(data['callback_query']['message']['text'].replace(" ", ", "), 'Spanish')
                 
 
-                print('Generated lesson text:')
-                print(text)
+                print('Generated lesson text:', flush=True)
+                print(text, flush=True)
 
 
                 # boundary = "----1234567890"
