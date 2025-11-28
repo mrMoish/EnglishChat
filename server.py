@@ -6,35 +6,65 @@ import asyncio
 import edge_tts
 
 import os
-import requests
+import http.client
+import uuid
 
-def send_audio_requests(chat_id: str, audio_bytes: bytes,
-                        filename: str = "voice.mp3", mime_type: str = "audio/mpeg"):
-    url = f"https://api.telegram.org/bot{os.environ.get('BOT_TOKEN')}/sendAudio"
-    files = {
-        "audio": (filename, audio_bytes, mime_type)
-    }
-    data = {
-        "chat_id": chat_id
-    }
-    r = requests.post(url, data=data, files=files)
-    return r.status_code, r.content
+def send_audio_bytes(bot_token: str, chat_id: str, audio_bytes: bytes,
+                     filename: str = "voice.mp3", mime_type: str = "audio/mpeg"):
+    boundary = "----WebKitFormBoundary" + uuid.uuid4().hex
+    crlf = "\r\n"
 
-def generate_tts_sync(text: str) -> bytes:
+    # Поля формы (chat_id и другие текстовые поля)
+    part_chat_id = (
+        f"--{boundary}{crlf}"
+        f'Content-Disposition: form-data; name="chat_id"{crlf}{crlf}'
+        f"{chat_id}{crlf}"
+    ).encode()
+
+    # Можно добавить подпись:
+    # part_caption = (f"--{boundary}{crlf}"
+    #                 f'Content-Disposition: form-data; name="caption"{crlf}{crlf}'
+    #                 f"My caption{crlf}').encode()
+
+    # Файл как часть multipart
+    part_file_header = (
+        f"--{boundary}{crlf}"
+        f'Content-Disposition: form-data; name="audio"; filename="{filename}"{crlf}'
+        f"Content-Type: {mime_type}{crlf}{crlf}"
+    ).encode()
+
+    body_end = (crlf + f"--{boundary}--{crlf}").encode()
+
+    body = part_chat_id + part_file_header + audio_bytes + body_end
+
+    headers = {
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+        "Content-Length": str(len(body)),
+        # "User-Agent": "MyBot/1.0"  # опционально
+    }
+
+    conn = http.client.HTTPSConnection("api.telegram.org")
+    path = f"/bot{bot_token}/sendAudio"
+    conn.request("POST", path, body, headers)
+    resp = conn.getresponse()
+    resp_data = resp.read()
+    conn.close()
+    return resp.status, resp_data
+
+
+
+def generate_tts_sync(text):
+    filename = "speech.mp3"
+
     async def _gen():
-        communicate = edge_tts.Communicate(
-            text=text,
-            voice="es-ES-AlvaroNeural"
-        )
+        communicate = edge_tts.Communicate(text, voice="es-ES-AlvaroNeural")
+        await communicate.save(filename)
 
-        audio = b""
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio += chunk["data"]
+    asyncio.run(_gen())
 
-        return audio
+    with open(filename, "rb") as f:
+        return f.read()
 
-    return asyncio.run(_gen())
 
 
 def encode_url(msg: bytes) -> str:
@@ -109,7 +139,7 @@ def text_lesson(words, target_lang):
         'POST', '/api/v1/chat/completions',
         json.dumps({
             'model': 'openai/gpt-4o',
-            'prompt':f'Create short, engaging messages in {target_lang} (1–2 sentences max), making sure to naturally include the following specific words: {words}. The tone should be friendly, modern, and conversational. Avoid complex grammar. Keep it simple and catchy. Additional emojis are allowed if they help engagement.',
+            'prompt':f'Create short, engaging messages in {target_lang} (1–2 sentences max), making sure to naturally include the following specific words: {words}. The tone should be friendly, modern, and conversational. Avoid complex grammar. Keep it simple and catchy.',
         }), {
             "Content-Type": "application/json",
             'Authorization': os.environ['OPENROUTER_API_KEY']
@@ -182,7 +212,7 @@ class MyHandler(server.SimpleHTTPRequestHandler):
                 
 
                 print('Generated lesson text:')
-                # print(generate_tts_sync(text))
+                print(text)
 
 
                 # boundary = "----1234567890"
@@ -210,17 +240,21 @@ class MyHandler(server.SimpleHTTPRequestHandler):
                 # conn.request("POST", f"/bot{os.environ.get('BOT_TOKEN')}/sendAudio", body, headers)
 
 
+                audio_bytes = generate_tts_sync(text)
+
+                
+                BOT_TOKEN = os.environ.get("BOT_TOKEN")
+                CHAT_ID = id  # ставь свой chat_id
+                # audio_bytes = ...  # bytes сгенерированного mp3/ogg
+                status, data = send_audio_bytes(BOT_TOKEN, CHAT_ID, audio_bytes=audio_bytes, filename="voz.mp3")
+                print(status, data[:300])
 
                 # response = conn.getresponse()
                 # print(response.status)
                 # print(response.read().decode())
 
-                status_code, content = send_audio_requests(
-                    chat_id=str(id),
-                    audio_bytes=generate_tts_sync(text),
-                    filename="lesson.mp3",
-                    mime_type="audio/mpeg"
-                )
+
+
                 conn.request(
                     "GET",
                     f"/bot{os.environ.get('BOT_TOKEN')}/deleteMessage?chat_id={id}&message_id={msg_id}"
