@@ -5,7 +5,6 @@ import json
 import asyncio
 import edge_tts
 
-import os
 import http.client
 import uuid
 
@@ -242,7 +241,8 @@ class MyHandler(server.SimpleHTTPRequestHandler):
                 # conn = client.HTTPSConnection("api.telegram.org")
                 # conn.request("POST", f"/bot{os.environ.get('BOT_TOKEN')}/sendAudio", body, headers)
 
-
+                import time
+                time.sleep(2)
                 audio_bytes = generate_tts_sync(text)
 
                 
