@@ -24,7 +24,7 @@ def generate_tts_sync(text: str) -> bytes:
     async def _gen():
         communicate = edge_tts.Communicate(
             text=text,
-            voice="es-AR-TomasNeural"
+            voice="es-ES-AlvaroNeural"
         )
 
         audio = b""
