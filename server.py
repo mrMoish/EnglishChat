@@ -2,6 +2,41 @@ from http import server, client
 import os
 import json
 
+import asyncio
+import edge_tts
+
+import os
+import requests
+
+def send_audio_requests(chat_id: str, audio_bytes: bytes,
+                        filename: str = "voice.mp3", mime_type: str = "audio/mpeg"):
+    url = f"https://api.telegram.org/bot{os.environ.get('BOT_TOKEN')}/sendAudio"
+    files = {
+        "audio": (filename, audio_bytes, mime_type)
+    }
+    data = {
+        "chat_id": chat_id
+    }
+    r = requests.post(url, data=data, files=files)
+    return r.status_code, r.content
+
+def generate_tts_sync(text: str) -> bytes:
+    async def _gen():
+        communicate = edge_tts.Communicate(
+            text=text,
+            voice="es-AR-TomasNeural"
+        )
+
+        audio = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio += chunk["data"]
+
+        return audio
+
+    return asyncio.run(_gen())
+
+
 def encode_url(msg: bytes) -> str:
     result = ''
     for byte in msg.encode('utf-8'):
@@ -74,7 +109,7 @@ def text_lesson(words, target_lang):
         'POST', '/api/v1/chat/completions',
         json.dumps({
             'model': 'openai/gpt-4o',
-            'prompt':f'Create short, engaging messages in {target_lang} (1–2 sentences max), making sure to naturally include the following specific words: {words}',
+            'prompt':f'Create short, engaging messages in {target_lang} (1–2 sentences max), making sure to naturally include the following specific words: {words}. The tone should be friendly, modern, and conversational. Avoid complex grammar. Keep it simple and catchy. Additional emojis are allowed if they help engagement.',
         }), {
             "Content-Type": "application/json",
             'Authorization': os.environ['OPENROUTER_API_KEY']
@@ -146,53 +181,46 @@ class MyHandler(server.SimpleHTTPRequestHandler):
                 text = text_lesson(data['callback_query']['message']['text'].replace(" ", ", "), 'Spanish')
                 
 
-                from elevenlabs.client import ElevenLabs
-                client2 = ElevenLabs(api_key=os.environ['ELEVENLABS_API_KEY'])
-                print('ELEVENLABS_API_KEY:', os.environ['ELEVENLABS_API_KEY'])
+                print('Generated lesson text:')
+                # print(generate_tts_sync(text))
 
-                audio = client2.text_to_speech.convert(
-                    text=text,
-                    voice_id="21m00Tcm4TlvDq8ikWAM",   # популярный голос (Rachel)
-                    model_id="eleven_multilingual_v2"
+
+                # boundary = "----1234567890"
+                # headers = {
+                #     "Content-Type": f"multipart/form-data; boundary={boundary}"
+                # }
+
+                # body_start = (
+                #     f"--{boundary}\r\n"
+                #     f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
+                #     f"{id}\r\n"
+                #     f"--{boundary}\r\n"
+                #     f'Content-Disposition: form-data; name="audio"; filename="sound.mp3"\r\n'
+                #     f"Content-Type: audio/mpeg\r\n\r\n"
+                # ).encode()
+
+                # with open(file_path, "rb") as f:
+                #     file_data = f.read()
+
+                # body_end = f"\r\n--{boundary}--\r\n".encode()
+
+                # body = body_start + file_data + body_end
+
+                # conn = client.HTTPSConnection("api.telegram.org")
+                # conn.request("POST", f"/bot{os.environ.get('BOT_TOKEN')}/sendAudio", body, headers)
+
+
+
+                # response = conn.getresponse()
+                # print(response.status)
+                # print(response.read().decode())
+
+                status_code, content = send_audio_requests(
+                    chat_id=str(id),
+                    audio_bytes=generate_tts_sync(text),
+                    filename="lesson.mp3",
+                    mime_type="audio/mpeg"
                 )
-
-                file_path = "output.mp3"
-
-                with open(file_path, "wb") as f:
-                    for chunk in audio:
-                        f.write(chunk)
-
-
-                boundary = "----1234567890"
-                headers = {
-                    "Content-Type": f"multipart/form-data; boundary={boundary}"
-                }
-
-                body_start = (
-                    f"--{boundary}\r\n"
-                    f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
-                    f"{id}\r\n"
-                    f"--{boundary}\r\n"
-                    f'Content-Disposition: form-data; name="audio"; filename="sound.mp3"\r\n'
-                    f"Content-Type: audio/mpeg\r\n\r\n"
-                ).encode()
-
-                with open(file_path, "rb") as f:
-                    file_data = f.read()
-
-                body_end = f"\r\n--{boundary}--\r\n".encode()
-
-                body = body_start + file_data + body_end
-
-                conn = client.HTTPSConnection("api.telegram.org")
-                conn.request("POST", f"/bot{os.environ.get('BOT_TOKEN')}/sendAudio", body, headers)
-
-
-
-                response = conn.getresponse()
-                print(response.status)
-                print(response.read().decode())
-
                 conn.request(
                     "GET",
                     f"/bot{os.environ.get('BOT_TOKEN')}/deleteMessage?chat_id={id}&message_id={msg_id}"
