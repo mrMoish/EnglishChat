@@ -60,7 +60,10 @@ def generate_tts_sync(text):
         communicate = edge_tts.Communicate(text, voice="es-ES-AlvaroNeural")
         await communicate.save(filename)
 
-    asyncio.run(_gen())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(_gen())
+    loop.close()
 
     with open(filename, "rb") as f:
         return f.read()
