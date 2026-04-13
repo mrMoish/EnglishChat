@@ -285,7 +285,8 @@ def serve_forever():
     
 # запуск на сервере, но не запускается при тестах
 if __name__ == "__main__":
-    serve_forever()    body = part_chat_id + part_file_header + audio_bytes + body_end
+    serve_forever()    
+    body = part_chat_id + part_file_header + audio_bytes + body_end
 
     headers = {
         "Content-Type": f"multipart/form-data; boundary={boundary}",
