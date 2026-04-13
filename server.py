@@ -529,3 +529,5 @@ def serve_forever():
 # запуск на сервере, но не запускается при тестах
 if __name__ == "__main__":
     serve_forever()
+
+
