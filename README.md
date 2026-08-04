@@ -87,8 +87,6 @@ TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 OPENROUTER_API_KEY=api_key
 ```
 
-> Никогда не публикуйте токены и секретные ключи в репозитории.
-
 ## ▶️ Running the Bot
 
 Запустите приложение:
